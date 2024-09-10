@@ -49,7 +49,7 @@ class ZapimoveisSpider(scrapy.Spider):
             yield scrapy.Request(url, callback=self.parse)
 
     def parse(self, response: Response):
-        for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall():
+        for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()[:1]:
             yield scrapy.Request(
                 url=sm, 
                 callback=self.gz_to_xml
@@ -65,7 +65,7 @@ class ZapimoveisSpider(scrapy.Spider):
     def sitemap_handler(self, response: Response):
         pages = response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()
 
-        yield from response.follow_all(pages, callback=self.page_handler, meta={
+        yield from response.follow_all(pages[:1], callback=self.page_handler, meta={
             "playwright": True,
             "playwright_page_methods": [
                 PageMethod("evaluate", "document.body.style.zoom = '1%';"), # Zoom out the page (force the page to load without scrolling down)
@@ -75,8 +75,8 @@ class ZapimoveisSpider(scrapy.Spider):
     def page_handler(self, response: Response):
         properties = response.xpath("//div[@class='listing-wrapper__content']/div[@data-position or @data-type]//a[@href]/@href").extract()
 
-        # yield from response.follow_all(properties, callback=self.property_handler, meta={"playwright": True})
-        yield from response.follow_all(properties, callback=self.property_handler)
+        # yield from response.follow_all(properties[:1], callback=self.property_handler, meta={"playwright": True})
+        yield from response.follow_all(properties[:1], callback=self.property_handler)
 
     def property_handler(self, response: Response):
         def remove_whitespaces(text):
@@ -151,8 +151,17 @@ class ZapimoveisSpider(scrapy.Spider):
 
             return None # In case that reference_market was unknown
 
+        def get_area_unit():
+            if "m²" in area:
+                area_unit = "SQMT"
+            else:
+                area_unit = None
+
+            return area_unit
 
         breadcrumb = response.xpath("//ol[contains(@class, 'breadcrumb')]/li[1]/a/text()").get()
+        agent_url = response.xpath("//section[@class='advertiser-info__container']//a[@data-testid='official-store-redirect-link']/@href").get()
+        area = response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='floorSize']/span[@class='amenities-item-text'])").get()
 
         yield {
             "competence_date": datetime.now().strftime("%Y-%m-%d"),
@@ -162,7 +171,7 @@ class ZapimoveisSpider(scrapy.Spider):
             "property_type": get_property_type(),
             "listing_type": get_listing_type(),
             "reference_market": get_reference_market(),
-            "location_description": None,
+            "location_description": remove_whitespaces(response.xpath("//div[@class='address-info-container']//p[contains(@class, 'address-info-value')]/text()").get()),
             "location_region": None,
             "location_province": None,
             "location_city": None,
@@ -172,18 +181,18 @@ class ZapimoveisSpider(scrapy.Spider):
             "location_street_n": None,
             "location_lon": None,
             "location_lat": None,
-            "area_unit": None,
-            "area_value": None,
-            "bedrooms": None,
-            "bathrooms": None,
-            "floor": None,
+            "area_unit": get_area_unit() if area else None,
+            "area_value": re.search(r"^(\d+)", area).group(1) if area else None,
+            "bedrooms": response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='numberOfRooms']/span[@class='amenities-item-text'])").get(),
+            "bathrooms": response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='numberOfBathroomsTotal']/span[@class='amenities-item-text'])").get(),
+            "floor": response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='floorLevel']/span[@class='amenities-item-text'])").get(),
             "total_floors": None,
-            "amenities_list": None,
-            "listing_date": None,
+            "amenities_list": ", ".join(response.xpath("//div[@data-testid='amenities-list']/p/span[@class='amenities-item-text']/text()").getall()),
+            "listing_date": remove_whitespaces(response.xpath("(//div[@data-testid='info-date']/span[@data-testid='listing-created-date']/text())[2]").get()),
             "listing_status": None,
-            "agent_id": None,
-            "agent_url": None,
-            "price": None,
-            "imageurl": None,
-            "itemurl": None,
+            "agent_id": re.search(r"/(\d+)/$", agent_url).group(1),
+            "agent_url": agent_url,
+            "price": re.search(r"([\d,\.]+)$", response.xpath("//p[@data-testid='price-info-value']/text()").get()).group(1).replace(".", ""),
+            "imageurl": re.search(r"(https?://[^\s,]+)", response.xpath("//ul[@data-testid='carousel-photos']/li//img[@srcset]/@srcset").get()).group(1),
+            "itemurl": response.url,
         }
