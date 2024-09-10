@@ -46,13 +46,14 @@ class ZapimoveisSpider(scrapy.Spider):
         ]
 
         for url in urls:
-            yield scrapy.Request(url, callback=self.parse)
+            yield scrapy.Request(url, callback=self.parse, dont_filter=True)
 
     def parse(self, response: Response):
-        for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()[:1]:
+        for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall():
             yield scrapy.Request(
                 url=sm, 
-                callback=self.gz_to_xml
+                callback=self.gz_to_xml,
+                dont_filter=True
             )
 
     def gz_to_xml(self, response: Response):
@@ -60,12 +61,12 @@ class ZapimoveisSpider(scrapy.Spider):
         sitemap = extract_gz(path)
         local_file_url = f"file:///{sitemap}"
 
-        yield scrapy.Request(url=local_file_url, callback=self.sitemap_handler)
+        yield scrapy.Request(url=local_file_url, callback=self.sitemap_handler, dont_filter=True)
 
     def sitemap_handler(self, response: Response):
         pages = response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()
 
-        yield from response.follow_all(pages[:1], callback=self.page_handler, meta={
+        yield from response.follow_all(pages, callback=self.page_handler, dont_filter=True, meta={
             "playwright": True,
             "playwright_page_methods": [
                 PageMethod("evaluate", "document.body.style.zoom = '1%';"), # Zoom out the page (force the page to load without scrolling down)
@@ -75,8 +76,8 @@ class ZapimoveisSpider(scrapy.Spider):
     def page_handler(self, response: Response):
         properties = response.xpath("//div[@class='listing-wrapper__content']/div[@data-position or @data-type]//a[@href]/@href").extract()
 
-        # yield from response.follow_all(properties[:1], callback=self.property_handler, meta={"playwright": True})
-        yield from response.follow_all(properties[:1], callback=self.property_handler)
+        # yield from response.follow_all(properties, callback=self.property_handler, meta={"playwright": True})
+        yield from response.follow_all(properties, callback=self.property_handler)
 
     def property_handler(self, response: Response):
         def remove_whitespaces(text):

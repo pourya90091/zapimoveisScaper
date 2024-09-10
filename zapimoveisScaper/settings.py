@@ -28,6 +28,8 @@ USER_AGENT = "zapimoveisScaper"
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
 
+JOBDIR = "job_data"
+
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 #CONCURRENT_REQUESTS = 32
 
