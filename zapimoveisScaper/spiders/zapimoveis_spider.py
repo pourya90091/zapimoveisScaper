@@ -83,13 +83,76 @@ class ZapimoveisSpider(scrapy.Spider):
             return text.strip() if text else None
 
         def get_property_type():
-            breadcrumb = response.xpath("//ol[contains(@class, 'breadcrumb')]/li[1]/a/text()").get()
-            if "Apartamentos" in breadcrumb:
+            # ------------- RESIDENTIAL -------------
+            if "-apartamento-" in response.url:
                 property_type = "Apartment"
+            elif "-studio-" in response.url:
+                property_type = "Studio"
+            elif "-quitinete-" in response.url:
+                property_type = "Studio apartment"
+            elif "-casa-" in response.url:
+                property_type = "House"
+            elif "-sobrados-" in response.url:
+                property_type = "Townhouse"
+            elif "-cobertura-" in response.url:
+                property_type = "Penthouse"
+            elif "-flat-" in response.url:
+                property_type = "Flat"
+            elif "-loft-" in response.url:
+                property_type = "Loft"
+            elif "-terreno-" in response.url:
+                property_type = "Land"
+            elif "-fazenda-" in response.url:
+                property_type = "Country House"
+            # ------------- RESIDENTIAL -------------
+
+            # ------------- BUSINESS -------------
+            elif "-loja-salao-" in response.url:
+                property_type = "Salon"
+            elif "-conjunto-comercial-sala-" in response.url:
+                property_type = "Commercial Unit"
+            elif "-andar-laje-corporativa-" in response.url:
+                property_type = "Corporate Floor"
+            elif "-hotel-" in response.url:
+                property_type = "Hotel"
+            elif "-predio-" in response.url:
+                property_type = "Entire Building"
+            elif "-galpao-" in response.url:
+                property_type = "Warehouse"
+            # TODO: Find a url of Garage property and add it
+            # ------------- BUSINESS -------------
             else:
                 property_type = None
 
             return property_type
+
+        def get_listing_type():
+            if "aluguel-" in response.url:
+                listing_type = "RENTAL"
+            elif "venda-" in response.url:
+                listing_type = "SALE"
+            else:
+                listing_type = None
+            
+            return listing_type
+
+        def get_reference_market():
+            RESIDENTIAL = ["-apartamento-", "-studio-", "-quitinete-", "-casa-", "-sobrados-",
+                           "-cobertura-", "-flat-", "-loft-", "-terreno-", "-fazenda-"]
+            for type in RESIDENTIAL:
+                if type in response.url:
+                    return "RESIDENTIAL"
+
+            BUSINESS = ["-loja-salao-", "-conjunto-comercial-sala-", "-andar-laje-corporativa-",
+                        "-hotel-", "-predio-", "-galpao-"]
+            for type in BUSINESS:
+                if type in response.url:
+                    return "BUSINESS"
+
+            return None # In case that reference_market was unknown
+
+
+        breadcrumb = response.xpath("//ol[contains(@class, 'breadcrumb')]/li[1]/a/text()").get()
 
         yield {
             "competence_date": datetime.now().strftime("%Y-%m-%d"),
@@ -97,8 +160,8 @@ class ZapimoveisSpider(scrapy.Spider):
             "listing_title": remove_whitespaces(response.xpath("//h1[contains(@class, 'description__title')]/text()").get()),
             "listing_description": remove_whitespaces(response.xpath("//p[@data-testid='description-content']/text()").get()),
             "property_type": get_property_type(),
-            "listing_type": None,
-            "reference_market": None,
+            "listing_type": get_listing_type(),
+            "reference_market": get_reference_market(),
             "location_description": None,
             "location_region": None,
             "location_province": None,
