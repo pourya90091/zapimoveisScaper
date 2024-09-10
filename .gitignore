@@ -1,3 +1,4 @@
 *.pyc
 temp/
 export/
+job_data/
