@@ -75,7 +75,7 @@ DOWNLOAD_DELAY = 1
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 #ITEM_PIPELINES = {
 #   "zapimoveisScaper.pipelines.ZapimoveisscaperPipeline": 300,
-#}
+#} # Uncomment this to save scraped data into Excel (xlsx) file.
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html

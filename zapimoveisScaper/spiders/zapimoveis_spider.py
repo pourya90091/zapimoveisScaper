@@ -1,36 +1,15 @@
 import scrapy
 from scrapy.http import Response
 from scrapy_playwright.page import PageMethod
-from pathlib import Path
 from zapimoveisScaper import settings
-import gzip
-import shutil
 import re
 from datetime import datetime
+from dotenv import load_dotenv
+import os
 
 
-TEMP_DIR = settings.BASE_DIR / "temp"
-Path(TEMP_DIR).mkdir(parents=True, exist_ok=True) # Ensures that TEMP_DIR exists.
-
-def extract_gz(filepath):
-    with gzip.open(filepath, 'rb') as f_in:
-        xml_file_path = str(filepath).replace(".gz", "")
-
-        with open(xml_file_path, 'wb') as f_out:
-            shutil.copyfileobj(f_in, f_out)
-
-    return xml_file_path
-
-
-def save_file(response: Response):
-    # Save the file locally
-    file_name = response.url.split("/")[-1]
-    path = TEMP_DIR / file_name
-    with open(path, "wb") as f:
-        f.write(response.body)
-
-    return path
-
+load_dotenv(settings.BASE_DIR / ".env")
+CITY = os.getenv("CITY")
 
 class ZapimoveisSpider(scrapy.Spider):
     name = "zapimoveis"
@@ -41,43 +20,21 @@ class ZapimoveisSpider(scrapy.Spider):
 
     def start_requests(self):
         urls = [
-            f"{self.base_url}/sitemap_used_resultpage_streets_index.xml",
-            # f"{self.base_url}/sitemap_development_resultpage_index.xml"
+            f"{self.base_url}/venda/imoveis/{CITY}"
         ]
 
         for url in urls:
-            yield scrapy.Request(url, callback=self.parse, dont_filter=True)
-
-    def parse(self, response: Response):
-        for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall():
-            yield scrapy.Request(
-                url=sm, 
-                callback=self.gz_to_xml,
-                dont_filter=True
-            )
-
-    def gz_to_xml(self, response: Response):
-        path = save_file(response)
-        sitemap = extract_gz(path)
-        local_file_url = f"file:///{sitemap}"
-
-        yield scrapy.Request(url=local_file_url, callback=self.sitemap_handler, dont_filter=True)
-
-    def sitemap_handler(self, response: Response):
-        pages = response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()
-
-        yield from response.follow_all(pages, callback=self.page_handler, dont_filter=True, meta={
+            yield scrapy.Request(url, callback=self.parse, dont_filter=True, meta={
             "playwright": True,
             "playwright_page_methods": [
                 PageMethod("evaluate", "document.body.style.zoom = '1%';"), # Zoom out the page (force the page to load without scrolling down)
                 PageMethod("wait_for_load_state", "networkidle"), # Wait until the network is idle (all network requests are done)
             ]})
 
-    def page_handler(self, response: Response):
+    def parse(self, response: Response):
         properties = response.xpath("//div[@class='listing-wrapper__content']/div[@data-position or @data-type]//a[@href]/@href").extract()
 
-        # yield from response.follow_all(properties, callback=self.property_handler, meta={"playwright": True})
-        yield from response.follow_all(properties, callback=self.property_handler)
+        yield from response.follow_all(properties[:5], callback=self.property_handler)
 
     def property_handler(self, response: Response):
         def remove_whitespaces(text):
@@ -175,7 +132,7 @@ class ZapimoveisSpider(scrapy.Spider):
             "location_description": remove_whitespaces(response.xpath("//div[@class='address-info-container']//p[contains(@class, 'address-info-value')]/text()").get()),
             "location_region": None,
             "location_province": None,
-            "location_city": None,
+            "location_city": CITY,
             "location_zip": None,
             "locaiton_neighborhood": None,
             "location_street": None,
