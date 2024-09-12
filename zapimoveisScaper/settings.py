@@ -28,7 +28,20 @@ USER_AGENT = "zapimoveisScaper"
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
 
-JOBDIR = "job_data"
+JOBDIR = f"{BASE_DIR}/job_data"
+
+PLAYWRIGHT_LAUNCH_OPTIONS = {
+    "firefox_user_prefs": {
+        "security.fileuri.strict_origin_policy": False,
+        "network.http.referer.XOriginPolicy": 0,
+        "network.http.referer.XOriginTrimmingPolicy": 0,
+        "permissions.default.image": 2,  # Optional: Block images to speed up scraping
+        "devtools.jsonview.enabled": False,
+    }
+}
+
+PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT = 0
+PLAYWRIGHT_BROWSER_TYPE = "firefox"
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 #CONCURRENT_REQUESTS = 32

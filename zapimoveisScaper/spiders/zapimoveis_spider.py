@@ -13,10 +13,8 @@ CITY = os.getenv("CITY")
 
 class ZapimoveisSpider(scrapy.Spider):
     name = "zapimoveis"
-    namespaces = [
-        ("x", "http://www.sitemaps.org/schemas/sitemap/0.9")
-    ]
     base_url = "https://www.zapimoveis.com.br"
+    page = 1
 
     def start_requests(self):
         urls = [
@@ -35,6 +33,15 @@ class ZapimoveisSpider(scrapy.Spider):
         properties = response.xpath("//div[@class='listing-wrapper__content']/div[@data-position or @data-type]//a[@href]/@href").extract()
 
         yield from response.follow_all(properties[:5], callback=self.property_handler)
+
+        if response.xpath("//section[@class='listing-wrapper__pagination']"): # Checks if more pages are available
+            self.page += 1
+            yield scrapy.Request(f"{self.base_url}/venda/imoveis/{CITY}/?pagina={self.page}", callback=self.parse, dont_filter=True, meta={
+            "playwright": True,
+            "playwright_page_methods": [
+                PageMethod("evaluate", "document.body.style.zoom = '1%';"), # Zoom out the page (force the page to load without scrolling down)
+                PageMethod("wait_for_load_state", "networkidle"), # Wait until the network is idle (all network requests are done)
+            ]})
 
     def property_handler(self, response: Response):
         def remove_whitespaces(text):
@@ -117,9 +124,46 @@ class ZapimoveisSpider(scrapy.Spider):
 
             return area_unit
 
-        breadcrumb = response.xpath("//ol[contains(@class, 'breadcrumb')]/li[1]/a/text()").get()
+        def get_listing_status():
+            script_tag = response.xpath("""//script[contains(text(), '"availability":"https://schema.org/InStock"')]/text()""").get()
+            if '"availability":"https://schema.org/InStock"' in script_tag:
+                listing_status = "available"
+            else:
+                listing_status = "not available"
+
+            return listing_status
+
+        def get_listing_date():
+            months = {
+                "janeiro": "01",
+                "fevereiro": "02",
+                "março": "03",
+                "abril": "04",
+                "maio": "05",
+                "junho": "06",
+                "julho": "07",
+                "agosto": "08",
+                "setembro": "09",
+                "outubro": "10",
+                "novembro": "11",
+                "dezembro": "12"
+            }
+
+            listing_date = response.xpath("(//div[@data-testid='info-date']/span[@data-testid='listing-created-date']/text())[2]").get().split(" de ")
+
+            year = listing_date[2]
+            month = months[listing_date[1]]
+            day = listing_date[0].zfill(2)
+
+            return f"{year}-{month}-{day}"
+
+        # breadcrumb = response.xpath("//ol[contains(@class, 'breadcrumb')]/li[1]/a/text()").get()
         agent_url = response.xpath("//section[@class='advertiser-info__container']//a[@data-testid='official-store-redirect-link']/@href").get()
         area = response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='floorSize']/span[@class='amenities-item-text'])").get()
+        bedrooms = response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='numberOfRooms']/span[@class='amenities-item-text'])").get()
+        bathrooms = response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='numberOfBathroomsTotal']/span[@class='amenities-item-text'])").get()
+        floor = response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='floorLevel']/span[@class='amenities-item-text'])").get()
+        price = response.xpath("//p[@data-testid='price-info-value']/text()").get()
 
         yield {
             "competence_date": datetime.now().strftime("%Y-%m-%d"),
@@ -141,16 +185,16 @@ class ZapimoveisSpider(scrapy.Spider):
             "location_lat": None,
             "area_unit": get_area_unit() if area else None,
             "area_value": re.search(r"^(\d+)", area).group(1) if area else None,
-            "bedrooms": response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='numberOfRooms']/span[@class='amenities-item-text'])").get(),
-            "bathrooms": response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='numberOfBathroomsTotal']/span[@class='amenities-item-text'])").get(),
-            "floor": response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='floorLevel']/span[@class='amenities-item-text'])").get(),
+            "bedrooms": re.search(r"^(\d+)", bedrooms).group(1) if bedrooms else None,
+            "bathrooms": re.search(r"^(\d+)", bathrooms).group(1) if bathrooms else None,
+            "floor": re.search(r"^(\d+)", floor).group(1) if floor else None,
             "total_floors": None,
             "amenities_list": ", ".join(response.xpath("//div[@data-testid='amenities-list']/p/span[@class='amenities-item-text']/text()").getall()),
-            "listing_date": remove_whitespaces(response.xpath("(//div[@data-testid='info-date']/span[@data-testid='listing-created-date']/text())[2]").get()),
-            "listing_status": None,
+            "listing_date": get_listing_date(),
+            "listing_status": get_listing_status(),
             "agent_id": re.search(r"/(\d+)/$", agent_url).group(1),
             "agent_url": agent_url,
-            "price": re.search(r"([\d,\.]+)$", response.xpath("//p[@data-testid='price-info-value']/text()").get()).group(1).replace(".", ""),
-            "imageurl": re.search(r"(https?://[^\s,]+)", response.xpath("//ul[@data-testid='carousel-photos']/li//img[@srcset]/@srcset").get()).group(1),
+            "price": re.search(r"([\d,\.]+)$", price).group(1).replace(".", "") if "Sob consulta" not in price else "On request",
+            "imageurl": re.findall(r"(https?://[^\s,]+)", response.xpath("//ul[@data-testid='carousel-photos']/li//img[@srcset]/@srcset").get())[-1],
             "itemurl": response.url,
         }
