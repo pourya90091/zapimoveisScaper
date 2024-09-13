@@ -7,6 +7,15 @@ from scrapy import signals
 
 # useful for handling different item types with a single interface
 from itemadapter import is_item, ItemAdapter
+from scrapy_playwright.handler import PageMethod
+
+class PlaywrightContextMiddleware:
+    async def process_request(self, request, spider):
+        if "playwright" in request.meta and request.meta["playwright"] is True:
+            request.meta["playwright_page_methods"] = [
+                PageMethod("evaluate", "document.body.style.zoom = '1%';"), # Zoom out the page (force the page to load without scrolling down)
+                PageMethod("wait_for_load_state", "networkidle"), # Wait until the network is idle (all network requests are done)
+            ]
 
 
 class ZapimoveisscaperSpiderMiddleware:

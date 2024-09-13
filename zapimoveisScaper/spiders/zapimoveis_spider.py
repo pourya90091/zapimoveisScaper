@@ -6,42 +6,84 @@ import re
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+import gzip
+from pathlib import Path
+import shutil
 
 
 load_dotenv(settings.BASE_DIR / ".env")
 CITY = os.getenv("CITY")
 
+TEMP_DIR = settings.BASE_DIR / "temp"
+Path(TEMP_DIR).mkdir(parents=True, exist_ok=True) # Ensures that TEMP_DIR exists.
+
+def extract_gz(filepath):
+    with gzip.open(filepath, 'rb') as f_in:
+        xml_file_path = str(filepath).replace(".gz", "")
+
+        with open(xml_file_path, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+
+    return xml_file_path
+
+
+def save_file(response: Response):
+    # Save the file locally
+    file_name = response.url.split("/")[-1]
+    path = TEMP_DIR / file_name
+    with open(path, "wb") as f:
+        f.write(response.body)
+
+    return path
+
+
 class ZapimoveisSpider(scrapy.Spider):
     name = "zapimoveis"
     base_url = "https://www.zapimoveis.com.br"
     page = 1
+    namespaces = [
+        ("x", "http://www.sitemaps.org/schemas/sitemap/0.9")
+    ]
 
     def start_requests(self):
-        urls = [
-            f"{self.base_url}/venda/imoveis/{CITY}"
-        ]
+        if CITY:
+            urls = [
+                f"{self.base_url}/venda/imoveis/{CITY}"
+            ]
+        else:
+            urls = [
+                f"{self.base_url}/sitemap_used_resultpage_streets_index.xml",
+                # f"{self.base_url}/sitemap_development_resultpage_index.xml"
+            ]
 
         for url in urls:
-            yield scrapy.Request(url, callback=self.parse, dont_filter=True, meta={
-            "playwright": True,
-            "playwright_page_methods": [
-                PageMethod("evaluate", "document.body.style.zoom = '1%';"), # Zoom out the page (force the page to load without scrolling down)
-                PageMethod("wait_for_load_state", "networkidle"), # Wait until the network is idle (all network requests are done)
-            ]})
+            yield scrapy.Request(url, callback=self.page_handler if CITY else self.parse, dont_filter=True, meta={"playwright": True if CITY else False})
 
     def parse(self, response: Response):
+        for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()[:1]:
+            yield scrapy.Request(url=sm, callback=self.gz_to_xml, dont_filter=True)
+
+    def gz_to_xml(self, response: Response):
+        path = save_file(response)
+        sitemap = extract_gz(path)
+        local_file_url = f"file:///{sitemap}"
+
+        yield scrapy.Request(url=local_file_url, callback=self.sitemap_handler, dont_filter=True)
+
+    def sitemap_handler(self, response: Response):
+        pages = response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()[:1]
+
+        yield from response.follow_all(pages, callback=self.page_handler, dont_filter=True, meta={"playwright": True})
+
+    def page_handler(self, response: Response):
         properties = response.xpath("//div[@class='listing-wrapper__content']/div[@data-position or @data-type]//a[@href]/@href").extract()
 
         yield from response.follow_all(properties[:5], callback=self.property_handler)
 
         if response.xpath("//section[@class='listing-wrapper__pagination']"): # Checks if more pages are available
             self.page += 1
-            yield scrapy.Request(f"{self.base_url}/venda/imoveis/{CITY}/?pagina={self.page}", callback=self.parse, dont_filter=True, meta={
-            "playwright": True,
-            "playwright_page_methods": [
-                PageMethod("evaluate", "document.body.style.zoom = '1%';"), # Zoom out the page (force the page to load without scrolling down)
-                PageMethod("wait_for_load_state", "networkidle"), # Wait until the network is idle (all network requests are done)
-            ]})
+            current_url = re.sub(r"\?pagina=\d+", "", response.url)
+            yield scrapy.Request(f"{current_url}?pagina={self.page}", callback=self.page_handler, dont_filter=True, meta={"playwright": True})
 
     def property_handler(self, response: Response):
         def remove_whitespaces(text):
