@@ -52,8 +52,14 @@ class ZapimoveisSpider(scrapy.Spider):
             ]
         else:
             urls = [
+                f"{self.base_url}/sitemap_minisite_index.xml",
+                f"{self.base_url}/sitemap_landing_index.xml",
                 f"{self.base_url}/sitemap_used_resultpage_streets_index.xml",
-                # f"{self.base_url}/sitemap_development_resultpage_index.xml"
+                f"{self.base_url}/sitemap_meter_index.xml",
+                f"{self.base_url}/sitemap_used_resultpage_index.xml",
+                f"{self.base_url}/sitemap_pois_index.xml",
+                f"{self.base_url}/sitemap_used_resultpage_amenities_index.xml",
+                f"{self.base_url}/sitemap_development_resultpage_index.xml"
             ]
 
         for url in urls:
