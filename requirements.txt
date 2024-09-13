@@ -1,0 +1,4 @@
+python-dotenv==1.0.0
+Scrapy==2.11.2
+scrapy-playwright==0.0.41
+XlsxWriter==3.2.0

@@ -1,14 +1,13 @@
 import scrapy
 from scrapy.http import Response
-from scrapy_playwright.page import PageMethod
 from zapimoveisScaper import settings
-import re
 from datetime import datetime
-from dotenv import load_dotenv
-import os
-import gzip
 from pathlib import Path
+from dotenv import load_dotenv
+import gzip
 import shutil
+import os
+import re
 
 
 load_dotenv(settings.BASE_DIR / ".env")
@@ -16,6 +15,7 @@ CITY = os.getenv("CITY")
 
 TEMP_DIR = settings.BASE_DIR / "temp"
 Path(TEMP_DIR).mkdir(parents=True, exist_ok=True) # Ensures that TEMP_DIR exists.
+
 
 def extract_gz(filepath):
     with gzip.open(filepath, 'rb') as f_in:
@@ -66,7 +66,7 @@ class ZapimoveisSpider(scrapy.Spider):
             yield scrapy.Request(url, callback=self.page_handler if CITY else self.parse, dont_filter=True, meta={"playwright": True if CITY else False})
 
     def parse(self, response: Response):
-        for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()[:1]:
+        for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall():
             yield scrapy.Request(url=sm, callback=self.gz_to_xml, dont_filter=True)
 
     def gz_to_xml(self, response: Response):
@@ -77,14 +77,14 @@ class ZapimoveisSpider(scrapy.Spider):
         yield scrapy.Request(url=local_file_url, callback=self.sitemap_handler, dont_filter=True)
 
     def sitemap_handler(self, response: Response):
-        pages = response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()[:1]
+        pages = response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()
 
         yield from response.follow_all(pages, callback=self.page_handler, dont_filter=True, meta={"playwright": True})
 
     def page_handler(self, response: Response):
         properties = response.xpath("//div[@class='listing-wrapper__content']/div[@data-position or @data-type]//a[@href]/@href").extract()
 
-        yield from response.follow_all(properties[:5], callback=self.property_handler)
+        yield from response.follow_all(properties, callback=self.property_handler)
 
         if response.xpath("//section[@class='listing-wrapper__pagination']"): # Checks if more pages are available
             self.page += 1
@@ -205,7 +205,6 @@ class ZapimoveisSpider(scrapy.Spider):
 
             return f"{year}-{month}-{day}"
 
-        # breadcrumb = response.xpath("//ol[contains(@class, 'breadcrumb')]/li[1]/a/text()").get()
         agent_url = response.xpath("//section[@class='advertiser-info__container']//a[@data-testid='official-store-redirect-link']/@href").get()
         area = response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='floorSize']/span[@class='amenities-item-text'])").get()
         bedrooms = response.xpath("normalize-space(//div[@data-testid='amenities-list']/p[@itemprop='numberOfRooms']/span[@class='amenities-item-text'])").get()
