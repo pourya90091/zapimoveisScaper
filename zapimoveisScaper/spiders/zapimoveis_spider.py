@@ -18,6 +18,7 @@ Path(TEMP_DIR).mkdir(parents=True, exist_ok=True) # Ensures that TEMP_DIR exists
 
 
 def extract_gz(filepath):
+    """Extract content of a .gz file and return the path of extracted .xml file (sitemap file)."""
     with gzip.open(filepath, 'rb') as f_in:
         xml_file_path = str(filepath).replace(".gz", "")
 
@@ -28,7 +29,7 @@ def extract_gz(filepath):
 
 
 def save_file(response: Response):
-    # Save the file locally
+    """Save a .gz file locally and return its path."""
     file_name = response.url.split("/")[-1]
     path = TEMP_DIR / file_name
     with open(path, "wb") as f:
@@ -66,10 +67,12 @@ class ZapimoveisSpider(scrapy.Spider):
             yield scrapy.Request(url, callback=self.page_handler if CITY else self.parse, dont_filter=True, meta={"playwright": True if CITY else False})
 
     def parse(self, response: Response):
+        """Start requesting to download all .gz files."""
         for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall():
             yield scrapy.Request(url=sm, callback=self.gz_to_xml, dont_filter=True)
 
     def gz_to_xml(self, response: Response):
+        """Save a .gz file and extract a sitemap file from it, then open the sitemap file locally."""
         path = save_file(response)
         sitemap = extract_gz(path)
         local_file_url = f"file:///{sitemap}"
@@ -77,11 +80,13 @@ class ZapimoveisSpider(scrapy.Spider):
         yield scrapy.Request(url=local_file_url, callback=self.sitemap_handler, dont_filter=True)
 
     def sitemap_handler(self, response: Response):
+        """Extract all urls in the sitemap page and request to them."""
         pages = response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()
 
         yield from response.follow_all(pages, callback=self.page_handler, dont_filter=True, meta={"playwright": True})
 
     def page_handler(self, response: Response):
+        """Loading all available properties in the page."""
         properties = response.xpath("//div[@class='listing-wrapper__content']/div[@data-position or @data-type]//a[@href]/@href").extract()
 
         yield from response.follow_all(properties, callback=self.property_handler)
@@ -92,6 +97,7 @@ class ZapimoveisSpider(scrapy.Spider):
             yield scrapy.Request(f"{current_url}?pagina={self.page}", callback=self.page_handler, dont_filter=True, meta={"playwright": True})
 
     def property_handler(self, response: Response):
+        """Fetching all needed data from property page. Also parsing some of them."""
         def remove_whitespaces(text):
             return text.strip() if text else None
 
