@@ -30,4 +30,6 @@ scrapy crawl zapimoveis -o export/zapimoveis.csv
 ## Tips
 
 >**Tip** : If you set a value for CITY (in `.env` file), the scraper would scrape all properties related with that city name but if you leave it empty, the scraper would try to scrape all available properties in the target website.
+
+>**Tip** : If you closed the program with `Ctrl + C` and you don't want to resume queued requests, remove `job_data/requests.queue` directory.
 ---
