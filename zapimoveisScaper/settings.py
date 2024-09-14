@@ -36,7 +36,14 @@ PLAYWRIGHT_LAUNCH_OPTIONS = {
         "network.http.referer.XOriginPolicy": 0,
         "network.http.referer.XOriginTrimmingPolicy": 0,
         "permissions.default.image": 2,  # Optional: Block images to speed up scraping
+        "media.autoplay.default": 5,  # Disable all autoplay
         "devtools.jsonview.enabled": False,
+
+        # Disable WebRTC (Web Real-Time Communication) to prevent leaking IP
+        "media.peerconnection.enabled": False,
+
+        # Reduce session history to 0 to save memory (especially helpful for large scrapes)
+        "browser.sessionhistory.max_entries": 0,
     }
 }
 

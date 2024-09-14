@@ -14,15 +14,14 @@ CITY = os.getenv("CITY")
 class ZapimoveisSpider(scrapy.Spider):
     name = "zapimoveis"
     base_url = "https://www.zapimoveis.com.br"
-    page = 1
     namespaces = [
         ("x", "http://www.sitemaps.org/schemas/sitemap/0.9")
     ]
 
     def start_requests(self):
         urls = [
-            f"{self.base_url}/venda/imoveis/{CITY}" if CITY else f"{self.base_url}/venda",
-            f"{self.base_url}/aluguel/imoveis/{CITY}" if CITY else f"{self.base_url}/aluguel"
+            f"{self.base_url}/venda/imoveis/{CITY}/?pagina=1" if CITY else f"{self.base_url}/venda/?pagina=1",
+            f"{self.base_url}/aluguel/imoveis/{CITY}/?pagina=1" if CITY else f"{self.base_url}/aluguel/?pagina=1"
         ]
 
         for url in urls:
@@ -34,10 +33,8 @@ class ZapimoveisSpider(scrapy.Spider):
 
         yield from response.follow_all(properties, callback=self.property_handler)
 
-        if response.xpath("//section[@class='listing-wrapper__pagination']"): # Checks if more pages are available
-            self.page += 1
-            current_url = re.sub(r"\?pagina=\d+", "", response.url)
-            yield scrapy.Request(f"{current_url}?pagina={self.page}", callback=self.page_handler, dont_filter=True, meta={"playwright": True})
+        next_url = re.sub(r"\?pagina=(\d+)", lambda m: f"?pagina={int(m.group(1)) + 1}", response.url)
+        yield scrapy.Request(next_url, callback=self.page_handler, dont_filter=True, meta={"playwright": True})
 
     def property_handler(self, response: Response):
         """Fetching all needed data from property page. Also parsing some of them."""
