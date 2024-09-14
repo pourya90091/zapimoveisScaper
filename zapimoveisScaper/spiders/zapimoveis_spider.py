@@ -2,40 +2,13 @@ import scrapy
 from scrapy.http import Response
 from zapimoveisScaper import settings
 from datetime import datetime
-from pathlib import Path
 from dotenv import load_dotenv
-import gzip
-import shutil
 import os
 import re
 
 
 load_dotenv(settings.BASE_DIR / ".env")
 CITY = os.getenv("CITY")
-
-TEMP_DIR = settings.BASE_DIR / "temp"
-Path(TEMP_DIR).mkdir(parents=True, exist_ok=True) # Ensures that TEMP_DIR exists.
-
-
-def extract_gz(filepath):
-    """Extract content of a .gz file and return the path of extracted .xml file (sitemap file)."""
-    with gzip.open(filepath, 'rb') as f_in:
-        xml_file_path = str(filepath).replace(".gz", "")
-
-        with open(xml_file_path, 'wb') as f_out:
-            shutil.copyfileobj(f_in, f_out)
-
-    return xml_file_path
-
-
-def save_file(response: Response):
-    """Save a .gz file locally and return its path."""
-    file_name = response.url.split("/")[-1]
-    path = TEMP_DIR / file_name
-    with open(path, "wb") as f:
-        f.write(response.body)
-
-    return path
 
 
 class ZapimoveisSpider(scrapy.Spider):
@@ -47,43 +20,13 @@ class ZapimoveisSpider(scrapy.Spider):
     ]
 
     def start_requests(self):
-        if CITY:
-            urls = [
-                f"{self.base_url}/venda/imoveis/{CITY}"
-            ]
-        else:
-            urls = [
-                f"{self.base_url}/sitemap_minisite_index.xml",
-                f"{self.base_url}/sitemap_landing_index.xml",
-                f"{self.base_url}/sitemap_used_resultpage_streets_index.xml",
-                f"{self.base_url}/sitemap_meter_index.xml",
-                f"{self.base_url}/sitemap_used_resultpage_index.xml",
-                f"{self.base_url}/sitemap_pois_index.xml",
-                f"{self.base_url}/sitemap_used_resultpage_amenities_index.xml",
-                f"{self.base_url}/sitemap_development_resultpage_index.xml"
-            ]
+        urls = [
+            f"{self.base_url}/venda/imoveis/{CITY}" if CITY else f"{self.base_url}/venda",
+            f"{self.base_url}/aluguel/imoveis/{CITY}" if CITY else f"{self.base_url}/aluguel"
+        ]
 
         for url in urls:
-            yield scrapy.Request(url, callback=self.page_handler if CITY else self.parse, dont_filter=True, meta={"playwright": True if CITY else False})
-
-    def parse(self, response: Response):
-        """Start requesting to download all .gz files."""
-        for sm in response.xpath("//x:loc/text()", namespaces=self.namespaces).getall():
-            yield scrapy.Request(url=sm, callback=self.gz_to_xml, dont_filter=True)
-
-    def gz_to_xml(self, response: Response):
-        """Save a .gz file and extract a sitemap file from it, then open the sitemap file locally."""
-        path = save_file(response)
-        sitemap = extract_gz(path)
-        local_file_url = f"file:///{sitemap}"
-
-        yield scrapy.Request(url=local_file_url, callback=self.sitemap_handler, dont_filter=True)
-
-    def sitemap_handler(self, response: Response):
-        """Extract all urls in the sitemap page and request to them."""
-        pages = response.xpath("//x:loc/text()", namespaces=self.namespaces).getall()
-
-        yield from response.follow_all(pages, callback=self.page_handler, dont_filter=True, meta={"playwright": True})
+            yield scrapy.Request(url, callback=self.page_handler, dont_filter=True, meta={"playwright": True})
 
     def page_handler(self, response: Response):
         """Loading all available properties in the page."""
