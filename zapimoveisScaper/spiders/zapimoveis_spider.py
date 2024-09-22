@@ -9,6 +9,7 @@ import re
 
 load_dotenv(settings.BASE_DIR / ".env")
 CITY = os.getenv("CITY")
+CITY_NAME = os.getenv("CITY_NAME")
 
 
 class ZapimoveisSpider(scrapy.Spider):
@@ -169,7 +170,7 @@ class ZapimoveisSpider(scrapy.Spider):
             "location_description": remove_whitespaces(response.xpath("//div[@class='address-info-container']//p[contains(@class, 'address-info-value')]/text()").get()),
             "location_region": None,
             "location_province": None,
-            "location_city": CITY,
+            "location_city": CITY_NAME,
             "location_zip": None,
             "locaiton_neighborhood": None,
             "location_street": None,

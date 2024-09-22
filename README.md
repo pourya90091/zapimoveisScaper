@@ -21,6 +21,7 @@ Variables you can set:
 
     - >Note: Select anything between `imoveis/` and `/...`.
 
+- **CITY_NAME**: Name of the city. It will be used to fill `location_city` field.
 ### Run
 
 ```bash
